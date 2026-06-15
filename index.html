@@ -1,3 +1,4 @@
+cat > /mnt/user-data/outputs/index.html << 'HTMLEOF'
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -29,13 +30,13 @@
   .mic-section{display:flex;flex-direction:column;align-items:center;gap:10px;padding:12px 0}
   .mic-btn{width:72px;height:72px;border-radius:50%;border:none;background:linear-gradient(135deg,#818cf8,#c084fc);color:#fff;font-size:26px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}
   .mic-btn.recording{background:linear-gradient(135deg,#ef4444,#f97316);animation:pulse-ring 1.5s infinite}
+  .mic-btn:disabled{opacity:.4;cursor:not-allowed}
   .mic-status{font-size:12px;color:#475569}
   .mic-status.active{color:#ef4444;font-weight:600}
   .translating{display:none;align-items:center;gap:8px;font-size:12px;color:#818cf8;font-weight:600}
   .translating.visible{display:flex}
   .dot{width:6px;height:6px;border-radius:50%;background:#818cf8;animation:dot-bounce 1.2s ease-in-out infinite}
-  .dot:nth-child(2){animation-delay:.2s}
-  .dot:nth-child(3){animation-delay:.4s}
+  .dot:nth-child(2){animation-delay:.2s}.dot:nth-child(3){animation-delay:.4s}
   .error{color:#f87171;font-size:13px;text-align:center;padding:4px 0;display:none}
   .history-section{width:100%;max-width:520px;display:none}
   .history-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
@@ -45,8 +46,7 @@
   .history-item{background:#161b27;border:1px solid #1e2535;border-radius:10px;padding:12px 14px;font-size:13px}
   .history-src{color:#64748b;margin-bottom:4px}
   .history-tgt{color:#a5b4fc;font-weight:500}
-  .footer{font-size:11px;color:#334155;text-align:center;margin-top:8px}
-  .not-supported{background:#2a1515;border:1px solid #7f1d1d;border-radius:12px;padding:16px 20px;color:#fca5a5;font-size:14px;text-align:center;max-width:520px;width:100%;display:none}
+  .footer{font-size:11px;color:#334155;text-align:center}
 </style>
 </head>
 <body>
@@ -54,10 +54,6 @@
   <div class="logo">Live Interpreter</div>
   <h1>실시간 <span>음성 통역</span></h1>
   <p class="subtitle">마이크로 말하면 자동으로 번역됩니다</p>
-</div>
-
-<div class="not-supported" id="notSupported">
-  ⚠️ 이 브라우저는 음성 인식을 지원하지 않습니다.<br>Chrome 또는 Edge를 사용해주세요.
 </div>
 
 <div class="lang-bar">
@@ -97,7 +93,7 @@
   <div class="history-list" id="historyList"></div>
 </div>
 
-<p class="footer">Chrome / Edge 브라우저에서 최적으로 작동합니다</p>
+<p class="footer">Chrome / Safari 브라우저에서 최적으로 작동합니다</p>
 
 <script>
   let recognition = null;
@@ -105,108 +101,124 @@
   let direction = 'ko-en';
   let historyData = [];
 
-  const labels = {
-    'ko-en': { src: '🇰🇷 한국어', tgt: '🇬🇧 British English', srcLang: 'ko-KR', from: 'Korean', to: 'British English' },
-    'en-ko': { src: '🇬🇧 British English', tgt: '🇰🇷 한국어', srcLang: 'en-GB', from: 'British English', to: 'Korean' }
+  const config = {
+    'ko-en': { src: '🇰🇷 한국어', tgt: '🇬🇧 British English', srcLang: 'ko-KR', langPair: 'ko|en' },
+    'en-ko': { src: '🇬🇧 British English', tgt: '🇰🇷 한국어', srcLang: 'en-GB', langPair: 'en|ko' }
   };
 
   function init() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { document.getElementById('notSupported').style.display='block'; document.getElementById('micBtn').disabled=true; return; }
+    if (!SR) {
+      alert('음성 인식을 지원하지 않는 브라우저입니다. Chrome을 사용해주세요.');
+      document.getElementById('micBtn').disabled = true;
+      return;
+    }
     recognition = new SR();
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = labels[direction].srcLang;
+    recognition.lang = config[direction].srcLang;
 
     recognition.onresult = (e) => {
-      let interim='', final='';
-      for (let i=e.resultIndex;i<e.results.length;i++) {
-        const t=e.results[i][0].transcript;
-        if(e.results[i].isFinal) final+=t; else interim+=t;
+      let interim = '', final = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) final += t;
+        else interim += t;
       }
-      const el=document.getElementById('srcText');
-      if(interim){el.textContent=interim;el.className='panel-text interim';}
-      if(final){el.textContent=final;el.className='panel-text';translate(final);}
+      const el = document.getElementById('srcText');
+      if (interim) { el.textContent = interim; el.className = 'panel-text interim'; }
+      if (final) { el.textContent = final; el.className = 'panel-text'; translate(final); }
     };
 
-    recognition.onerror = (e) => { if(e.error!=='no-speech') showError('음성 인식 오류: '+e.error); stopRec(); };
-    recognition.onend = () => { if(isRecording) recognition.start(); };
+    recognition.onerror = (e) => {
+      if (e.error !== 'no-speech') showError('음성 인식 오류: ' + e.error);
+      stopRec();
+    };
+    recognition.onend = () => { if (isRecording) recognition.start(); };
   }
 
-  function toggleRec(){ isRecording ? stopRec() : startRec(); }
+  function toggleRec() { isRecording ? stopRec() : startRec(); }
 
-  function startRec(){
-    if(!recognition){init();if(!recognition)return;}
-    recognition.lang=labels[direction].srcLang;
-    try{recognition.start();}catch(e){}
-    isRecording=true;
-    document.getElementById('micBtn').className='mic-btn recording';
-    document.getElementById('micBtn').textContent='⏹';
-    document.getElementById('micStatus').textContent='🔴 녹음 중... 말해보세요';
-    document.getElementById('micStatus').className='mic-status active';
+  function startRec() {
+    if (!recognition) { init(); if (!recognition) return; }
+    recognition.lang = config[direction].srcLang;
+    try { recognition.start(); } catch(e) {}
+    isRecording = true;
+    document.getElementById('micBtn').className = 'mic-btn recording';
+    document.getElementById('micBtn').textContent = '⏹';
+    document.getElementById('micStatus').textContent = '🔴 녹음 중... 말해보세요';
+    document.getElementById('micStatus').className = 'mic-status active';
     hideError();
   }
 
-  function stopRec(){
-    isRecording=false;
-    try{recognition?.stop();}catch(e){}
-    document.getElementById('micBtn').className='mic-btn';
-    document.getElementById('micBtn').textContent='🎤';
-    document.getElementById('micStatus').textContent='버튼을 눌러 시작';
-    document.getElementById('micStatus').className='mic-status';
+  function stopRec() {
+    isRecording = false;
+    try { recognition.stop(); } catch(e) {}
+    document.getElementById('micBtn').className = 'mic-btn';
+    document.getElementById('micBtn').textContent = '🎤';
+    document.getElementById('micStatus').textContent = '버튼을 눌러 시작';
+    document.getElementById('micStatus').className = 'mic-status';
   }
 
-  async function translate(text){
-    const d=labels[direction];
-    document.getElementById('translating').className='translating visible';
-    try{
-      const res=await fetch('https://api.mymemory.translated.net/get',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          model:'claude-sonnet-4-6',
-          max_tokens:1000,
-          messages:[{role:'user',content:`Translate the following ${d.from} text into ${d.to}. ${d.to==='British English'?'Use British English spelling and expressions (e.g. colour, favour, whilst, flat, lift, mobile).':''} Output only the translation with no explanation.\n\n"${text}"`}]
-        })
-      });
-      const data=await res.json();
-      const result=data.content?.[0]?.text?.trim()||'번역 실패';
-      const el=document.getElementById('tgtText');
-      el.textContent=result;el.className='panel-text result';
-      addHistory(text,result);
-    }catch(e){showError('번역 오류가 발생했습니다.');}
-    finally{document.getElementById('translating').className='translating';}
+  async function translate(text) {
+    document.getElementById('translating').className = 'translating visible';
+    hideError();
+    try {
+      const langPair = config[direction].langPair;
+      const url = 'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text) + '&langpair=' + langPair;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('network error');
+      const data = await res.json();
+      if (data.responseStatus !== 200) throw new Error('api error');
+      const result = data.responseData.translatedText;
+      const el = document.getElementById('tgtText');
+      el.textContent = result;
+      el.className = 'panel-text result';
+      addHistory(text, result);
+    } catch(e) {
+      showError('번역 오류: ' + e.message);
+    } finally {
+      document.getElementById('translating').className = 'translating';
+    }
   }
 
-  function swapLangs(){
-    if(isRecording)stopRec();
-    direction=direction==='ko-en'?'en-ko':'ko-en';
-    const d=labels[direction];
-    document.getElementById('srcLabel').textContent=d.src;
-    document.getElementById('tgtLabel').textContent=d.tgt;
-    const s=document.getElementById('srcText');s.textContent='마이크 버튼을 눌러 말해보세요...';s.className='panel-text placeholder';
-    const t=document.getElementById('tgtText');t.textContent='번역 결과가 여기에 표시됩니다...';t.className='panel-text placeholder';
-    if(recognition)recognition.lang=d.srcLang;
+  function swapLangs() {
+    if (isRecording) stopRec();
+    direction = direction === 'ko-en' ? 'en-ko' : 'ko-en';
+    const d = config[direction];
+    document.getElementById('srcLabel').textContent = d.src;
+    document.getElementById('tgtLabel').textContent = d.tgt;
+    const s = document.getElementById('srcText');
+    s.textContent = '마이크 버튼을 눌러 말해보세요...';
+    s.className = 'panel-text placeholder';
+    const t = document.getElementById('tgtText');
+    t.textContent = '번역 결과가 여기에 표시됩니다...';
+    t.className = 'panel-text placeholder';
+    if (recognition) recognition.lang = d.srcLang;
   }
 
-  function addHistory(src,tgt){
-    historyData.unshift({src,tgt});
-    if(historyData.length>15)historyData.pop();
+  function addHistory(src, tgt) {
+    historyData.unshift({ src, tgt });
+    if (historyData.length > 15) historyData.pop();
     renderHistory();
   }
 
-  function renderHistory(){
-    const s=document.getElementById('historySection');
-    const l=document.getElementById('historyList');
-    s.style.display=historyData.length?'block':'none';
-    l.innerHTML=historyData.map(h=>`<div class="history-item"><div class="history-src">${h.src}</div><div class="history-tgt">${h.tgt}</div></div>`).join('');
+  function renderHistory() {
+    const s = document.getElementById('historySection');
+    const l = document.getElementById('historyList');
+    s.style.display = historyData.length ? 'block' : 'none';
+    l.innerHTML = historyData.map(h =>
+      '<div class="history-item"><div class="history-src">' + h.src + '</div><div class="history-tgt">' + h.tgt + '</div></div>'
+    ).join('');
   }
 
-  function clearHistory(){historyData=[];renderHistory();}
-  function showError(m){const e=document.getElementById('errorMsg');e.textContent=m;e.style.display='block';}
-  function hideError(){document.getElementById('errorMsg').style.display='none';}
+  function clearHistory() { historyData = []; renderHistory(); }
+  function showError(m) { const e = document.getElementById('errorMsg'); e.textContent = m; e.style.display = 'block'; }
+  function hideError() { document.getElementById('errorMsg').style.display = 'none'; }
 
   init();
 </script>
 </body>
 </html>
+HTMLEOF
+echo "done"
