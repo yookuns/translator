@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>실시간 음성 통역기</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;600&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'DM Sans',sans-serif;background:#0e1117;color:#e2e8f0;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:40px 16px;gap:24px}
+  @keyframes pulse-ring{0%{box-shadow:0 0 0 0 rgba(239,68,68,.6)}70%{box-shadow:0 0 0 20px rgba(239,68,68,0)}100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}}
+  @keyframes dot-bounce{0%,80%,100%{transform:scale(.6);opacity:.4}40%{transform:scale(1);opacity:1}}
+  .logo{font-size:11px;font-weight:600;letter-spacing:.2em;color:#818cf8;text-transform:uppercase;margin-bottom:8px}
+  h1{font-size:28px;font-weight:300;letter-spacing:-.02em}
+  h1 span{font-weight:700;background:linear-gradient(135deg,#818cf8,#c084fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .subtitle{font-size:13px;color:#64748b;margin-top:6px}
+  .lang-bar{display:flex;align-items:center;gap:12px;background:#161b27;border:1px solid #1e2535;border-radius:12px;padding:12px 18px;width:100%;max-width:520px}
+  .lang-name{font-size:14px;font-weight:600;flex:1}
+  .lang-name.right{text-align:right}
+  .swap-btn{background:#1e2535;border:none;border-radius:8px;width:34px;height:34px;cursor:pointer;color:#818cf8;font-size:16px;display:flex;align-items:center;justify-content:center}
+  .main{width:100%;max-width:520px;display:flex;flex-direction:column;gap:12px}
+  .panel{background:#161b27;border:1px solid #1e2535;border-radius:14px;padding:18px 20px;min-height:110px}
+  .panel.translated{background:#13182a;border-color:#1e2840}
+  .panel-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.15em;color:#475569;margin-bottom:10px}
+  .panel-text{font-size:17px;font-weight:300;line-height:1.65;color:#e2e8f0}
+  .panel-text.placeholder{color:#334155;font-style:italic}
+  .panel-text.interim{color:#94a3b8}
+  .panel-text.result{color:#a5b4fc}
+  .mic-section{display:flex;flex-direction:column;align-items:center;gap:10px;padding:12px 0}
+  .mic-btn{width:72px;height:72px;border-radius:50%;border:none;background:linear-gradient(135deg,#818cf8,#c084fc);color:#fff;font-size:26px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}
+  .mic-btn.recording{background:linear-gradient(135deg,#ef4444,#f97316);animation:pulse-ring 1.5s infinite}
+  .mic-status{font-size:12px;color:#475569}
+  .mic-status.active{color:#ef4444;font-weight:600}
+  .translating{display:none;align-items:center;gap:8px;font-size:12px;color:#818cf8;font-weight:600}
+  .translating.visible{display:flex}
+  .dot{width:6px;height:6px;border-radius:50%;background:#818cf8;animation:dot-bounce 1.2s ease-in-out infinite}
+  .dot:nth-child(2){animation-delay:.2s}
+  .dot:nth-child(3){animation-delay:.4s}
+  .error{color:#f87171;font-size:13px;text-align:center;padding:4px 0;display:none}
+  .history-section{width:100%;max-width:520px;display:none}
+  .history-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  .history-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.12em;color:#475569}
+  .clear-btn{background:transparent;border:1px solid #1e2535;border-radius:6px;color:#475569;font-size:11px;padding:4px 10px;cursor:pointer;font-family:inherit}
+  .history-list{display:flex;flex-direction:column;gap:8px;max-height:280px;overflow-y:auto}
+  .history-item{background:#161b27;border:1px solid #1e2535;border-radius:10px;padding:12px 14px;font-size:13px}
+  .history-src{color:#64748b;margin-bottom:4px}
+  .history-tgt{color:#a5b4fc;font-weight:500}
+  .footer{font-size:11px;color:#334155;text-align:center;margin-top:8px}
+  .not-supported{background:#2a1515;border:1px solid #7f1d1d;border-radius:12px;padding:16px 20px;color:#fca5a5;font-size:14px;text-align:center;max-width:520px;width:100%;display:none}
+</style>
+</head>
+<body>
+<div style="text-align:center">
+  <div class="logo">Live Interpreter</div>
+  <h1>실시간 <span>음성 통역</span></h1>
+  <p class="subtitle">마이크로 말하면 자동으로 번역됩니다</p>
+</div>
+
+<div class="not-supported" id="notSupported">
+  ⚠️ 이 브라우저는 음성 인식을 지원하지 않습니다.<br>Chrome 또는 Edge를 사용해주세요.
+</div>
+
+<div class="lang-bar">
+  <span class="lang-name" id="srcLabel">🇰🇷 한국어</span>
+  <button class="swap-btn" onclick="swapLangs()">⇄</button>
+  <span class="lang-name right" id="tgtLabel">🇬🇧 British English</span>
+</div>
+
+<div class="main">
+  <div class="panel">
+    <div class="panel-label">원문</div>
+    <div class="panel-text placeholder" id="srcText">마이크 버튼을 눌러 말해보세요...</div>
+  </div>
+
+  <div class="mic-section">
+    <button class="mic-btn" id="micBtn" onclick="toggleRec()">🎤</button>
+    <div class="mic-status" id="micStatus">버튼을 눌러 시작</div>
+    <div class="translating" id="translating">
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+      번역 중...
+    </div>
+  </div>
+
+  <div class="panel translated">
+    <div class="panel-label">번역</div>
+    <div class="panel-text placeholder" id="tgtText">번역 결과가 여기에 표시됩니다...</div>
+  </div>
+
+  <div class="error" id="errorMsg"></div>
+</div>
+
+<div class="history-section" id="historySection">
+  <div class="history-header">
+    <span class="history-title">번역 기록</span>
+    <button class="clear-btn" onclick="clearHistory()">지우기</button>
+  </div>
+  <div class="history-list" id="historyList"></div>
+</div>
+
+<p class="footer">Chrome / Edge 브라우저에서 최적으로 작동합니다</p>
+
+<script>
+  let recognition = null;
+  let isRecording = false;
+  let direction = 'ko-en';
+  let historyData = [];
+
+  const labels = {
+    'ko-en': { src: '🇰🇷 한국어', tgt: '🇬🇧 British English', srcLang: 'ko-KR', from: 'Korean', to: 'British English' },
+    'en-ko': { src: '🇬🇧 British English', tgt: '🇰🇷 한국어', srcLang: 'en-GB', from: 'British English', to: 'Korean' }
+  };
+
+  function init() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { document.getElementById('notSupported').style.display='block'; document.getElementById('micBtn').disabled=true; return; }
+    recognition = new SR();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = labels[direction].srcLang;
+
+    recognition.onresult = (e) => {
+      let interim='', final='';
+      for (let i=e.resultIndex;i<e.results.length;i++) {
+        const t=e.results[i][0].transcript;
+        if(e.results[i].isFinal) final+=t; else interim+=t;
+      }
+      const el=document.getElementById('srcText');
+      if(interim){el.textContent=interim;el.className='panel-text interim';}
+      if(final){el.textContent=final;el.className='panel-text';translate(final);}
+    };
+
+    recognition.onerror = (e) => { if(e.error!=='no-speech') showError('음성 인식 오류: '+e.error); stopRec(); };
+    recognition.onend = () => { if(isRecording) recognition.start(); };
+  }
+
+  function toggleRec(){ isRecording ? stopRec() : startRec(); }
+
+  function startRec(){
+    if(!recognition){init();if(!recognition)return;}
+    recognition.lang=labels[direction].srcLang;
+    try{recognition.start();}catch(e){}
+    isRecording=true;
+    document.getElementById('micBtn').className='mic-btn recording';
+    document.getElementById('micBtn').textContent='⏹';
+    document.getElementById('micStatus').textContent='🔴 녹음 중... 말해보세요';
+    document.getElementById('micStatus').className='mic-status active';
+    hideError();
+  }
+
+  function stopRec(){
+    isRecording=false;
+    try{recognition?.stop();}catch(e){}
+    document.getElementById('micBtn').className='mic-btn';
+    document.getElementById('micBtn').textContent='🎤';
+    document.getElementById('micStatus').textContent='버튼을 눌러 시작';
+    document.getElementById('micStatus').className='mic-status';
+  }
+
+  async function translate(text){
+    const d=labels[direction];
+    document.getElementById('translating').className='translating visible';
+    try{
+      const res=await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          model:'claude-sonnet-4-6',
+          max_tokens:1000,
+          messages:[{role:'user',content:`Translate the following ${d.from} text into ${d.to}. ${d.to==='British English'?'Use British English spelling and expressions (e.g. colour, favour, whilst, flat, lift, mobile).':''} Output only the translation with no explanation.\n\n"${text}"`}]
+        })
+      });
+      const data=await res.json();
+      const result=data.content?.[0]?.text?.trim()||'번역 실패';
+      const el=document.getElementById('tgtText');
+      el.textContent=result;el.className='panel-text result';
+      addHistory(text,result);
+    }catch(e){showError('번역 오류가 발생했습니다.');}
+    finally{document.getElementById('translating').className='translating';}
+  }
+
+  function swapLangs(){
+    if(isRecording)stopRec();
+    direction=direction==='ko-en'?'en-ko':'ko-en';
+    const d=labels[direction];
+    document.getElementById('srcLabel').textContent=d.src;
+    document.getElementById('tgtLabel').textContent=d.tgt;
+    const s=document.getElementById('srcText');s.textContent='마이크 버튼을 눌러 말해보세요...';s.className='panel-text placeholder';
+    const t=document.getElementById('tgtText');t.textContent='번역 결과가 여기에 표시됩니다...';t.className='panel-text placeholder';
+    if(recognition)recognition.lang=d.srcLang;
+  }
+
+  function addHistory(src,tgt){
+    historyData.unshift({src,tgt});
+    if(historyData.length>15)historyData.pop();
+    renderHistory();
+  }
+
+  function renderHistory(){
+    const s=document.getElementById('historySection');
+    const l=document.getElementById('historyList');
+    s.style.display=historyData.length?'block':'none';
+    l.innerHTML=historyData.map(h=>`<div class="history-item"><div class="history-src">${h.src}</div><div class="history-tgt">${h.tgt}</div></div>`).join('');
+  }
+
+  function clearHistory(){historyData=[];renderHistory();}
+  function showError(m){const e=document.getElementById('errorMsg');e.textContent=m;e.style.display='block';}
+  function hideError(){document.getElementById('errorMsg').style.display='none';}
+
+  init();
+</script>
+</body>
+</html>
